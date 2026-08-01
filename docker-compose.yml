@@ -1,0 +1,57 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: parking-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./parking-lot
+      dockerfile: Dockerfile
+    container_name: parking-backend
+    restart: always
+    environment:
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./Parking-Lot_FE
+      dockerfile: Dockerfile
+    container_name: parking-frontend
+    restart: always
+    depends_on:
+      - backend
+
+  gateway:
+    image: nginx:alpine
+    container_name: parking-gateway
+    restart: always
+    ports:
+      - "${GATEWAY_PORT}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  mysql_data:
+
+
