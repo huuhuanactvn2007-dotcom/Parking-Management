@@ -17,6 +17,7 @@ import ModalHistory from '../components/modal/modalHistory';
 import ModalReservationShow from '../components/modal/modalReservationShow';
 import { AvatarState } from '../../../core/atoms/avatar/avatarState';
 import { arrayBufferToBase64 } from '../../helper/helper';
+
 const HeaderClient = () => {
     const navigate = useNavigate();
     const location = useLocation();
@@ -40,10 +41,17 @@ const HeaderClient = () => {
                 () => { }
             ).then((response) => {
                 if (response) {
-                    setDataProfile(response?.customer?.user)
+                    const userObj = response?.customer?.user;
+                    setDataProfile(userObj);
+                    
+                    // 🟢 Ưu tiên lấy avatar từ Firebase/User profile nếu có
+                    if (userObj?.avatar && typeof userObj.avatar === 'string' && userObj.avatar.trim() !== '') {
+                        setImageUrl(userObj.avatar);
+                    }
+
                     setProfileState(
                         {
-                            user: response?.customer?.user,
+                            user: userObj,
                             contactNumber: response?.customer?.contactNumber,
                             vehicleNumber: response?.customer?.vehicleNumber,
                             regularPass: response?.regularPass
@@ -64,13 +72,15 @@ const HeaderClient = () => {
             await authService.getAvatar(
                 setLoading
             ).then((response) => {
-                const base64String = arrayBufferToBase64(response);
-                const imageSrc = `data:image/jpeg;base64,${base64String}`;
-                setImageUrl(imageSrc)
-                setAvatarState({ data: imageSrc })
-                // setDetailState({
-
-                // })
+                // 🟢 Chỉ cập nhật nếu API getAvatar thực sự trả về dữ liệu hình ảnh hợp lệ
+                if (response && response !== 'null' && response !== 'undefined') {
+                    const base64Str = arrayBufferToBase64(response);
+                    if (base64Str && base64Str !== 'null' && base64Str !== 'undefined' && base64Str.length > 20) {
+                        const imageSrc = typeof response === 'string' ? response : `data:image/jpeg;base64,${base64Str}`;
+                        setImageUrl(imageSrc);
+                        setAvatarState({ data: imageSrc });
+                    }
+                }
             })
         }
         catch (error) {
@@ -160,7 +170,7 @@ const HeaderClient = () => {
                 }
                 <Menu.Item className='info-admin' onClick={openModalProfile}>
                     <div className='info-admin-title px-1 py-2 flex items-center hover:text-[#5e5eff]'>
-                        <svg className='mr-1' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg className='mr-1' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <circle cx="12" cy="5" r="4" />
                             <path d="M12 9a9 9 0 0 1 9 9H3a9 9 0 0 1 9-9z" />
                         </svg>
@@ -170,8 +180,8 @@ const HeaderClient = () => {
                 <Menu.Item className='info-admin' onClick={openModalReservationShow}>
                     <div className='info-admin-title px-1 py-2 flex items-center hover:text-[#5e5eff]'>
                         <svg className='mr-1' width="20px" height="20px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path fill-rule="evenodd" clip-rule="evenodd" d="M11 6C9.34315 6 8 7.34315 8 9V17C8 17.5523 8.44772 18 9 18C9.55229 18 10 17.5523 10 17V14L12.0045 14C12.2149 13.9987 12.426 13.974 12.6332 13.9395C12.9799 13.8817 13.4575 13.7642 13.9472 13.5194C14.4409 13.2725 14.9649 12.8866 15.3633 12.289C15.7659 11.6851 16 10.9249 16 9.99996C16 9.07499 15.7659 8.31478 15.3633 7.71092C14.9649 7.11332 14.4408 6.7274 13.9472 6.48058C13.4575 6.23573 12.9799 6.11828 12.6332 6.06049C12.4248 6.02575 12.2117 6.0001 12 6H11ZM10 12V9C10 8.44772 10.4477 8 11 8L12.0004 8.00018C12.3603 8.01218 12.7318 8.10893 13.0528 8.26944C13.3092 8.39762 13.5351 8.5742 13.6992 8.82033C13.8591 9.06021 14 9.42497 14 9.99996C14 10.575 13.8591 10.9397 13.6992 11.1796C13.5351 11.4258 13.3091 11.6023 13.0528 11.7305C12.7318 11.891 12.3603 11.9878 12.0003 11.9998L10 12Z" fill="#808080" />
-                            <path fill-rule="evenodd" clip-rule="evenodd" d="M20 1C21.6569 1 23 2.34315 23 4V20C23 21.6569 21.6569 23 20 23H4C2.34315 23 1 21.6569 1 20V4C1 2.34315 2.34315 1 4 1H20ZM20 3C20.5523 3 21 3.44772 21 4V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V4C3 3.44772 3.44772 3 4 3H20Z" fill="#808080" />
+                            <path fillRule="evenodd" clipRule="evenodd" d="M11 6C9.34315 6 8 7.34315 8 9V17C8 17.5523 8.44772 18 9 18C9.55229 18 10 17.5523 10 17V14L12.0045 14C12.2149 13.9987 12.426 13.974 12.6332 13.9395C12.9799 13.8817 13.4575 13.7642 13.9472 13.5194C14.4409 13.2725 14.9649 12.8866 15.3633 12.289C15.7659 11.6851 16 10.9249 16 9.99996C16 9.07499 15.7659 8.31478 15.3633 7.71092C14.9649 7.11332 14.4408 6.7274 13.9472 6.48058C13.4575 6.23573 12.9799 6.11828 12.6332 6.06049C12.4248 6.02575 12.2117 6.0001 12 6H11ZM10 12V9C10 8.44772 10.4477 8 11 8L12.0004 8.00018C12.3603 8.01218 12.7318 8.10893 13.0528 8.26944C13.3092 8.39762 13.5351 8.5742 13.6992 8.82033C13.8591 9.06021 14 9.42497 14 9.99996C14 10.575 13.8591 10.9397 13.6992 11.1796C13.5351 11.4258 13.3091 11.6023 13.0528 11.7305C12.7318 11.891 12.3603 11.9878 12.0003 11.9998L10 12Z" fill="#808080" />
+                            <path fillRule="evenodd" clipRule="evenodd" d="M20 1C21.6569 1 23 2.34315 23 4V20C23 21.6569 21.6569 23 20 23H4C2.34315 23 1 21.6569 1 20V4C1 2.34315 2.34315 1 4 1H20ZM20 3C20.5523 3 21 3.44772 21 4V20C21 20.5523 20.5523 21 20 21H4C3.44772 21 3 20.5523 3 20V4C3 3.44772 3.44772 3 4 3H20Z" fill="#808080" />
                         </svg>
                         Thông tin đặt chỗ
                     </div>
@@ -179,7 +189,7 @@ const HeaderClient = () => {
                 <Menu.Item className='info-admin' onClick={openModalHistoryShow}>
                     <div className='info-admin-title px-1 py-2 flex items-center hover:text-[#5e5eff]'>
                         <svg className='mr-1' width="20px" height="20px" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M7 3V6M17 3V6M7.10002 20C7.56329 17.7178 9.58104 16 12 16C14.419 16 16.4367 17.7178 16.9 20M6.2 21H17.8C18.9201 21 19.4802 21 19.908 20.782C20.2843 20.5903 20.5903 20.2843 20.782 19.908C21 19.4802 21 18.9201 21 17.8V8.2C21 7.07989 21 6.51984 20.782 6.09202C20.5903 5.71569 20.2843 5.40973 19.908 5.21799C19.4802 5 18.9201 5 17.8 5H6.2C5.0799 5 4.51984 5 4.09202 5.21799C3.71569 5.40973 3.40973 5.71569 3.21799 6.09202C3 6.51984 3 7.07989 3 8.2V17.8C3 18.9201 3 19.4802 3.21799 19.908C3.40973 20.2843 3.71569 20.5903 4.09202 20.782C4.51984 21 5.07989 21 6.2 21ZM14 11C14 12.1046 13.1046 13 12 13C10.8954 13 10 12.1046 10 11C10 9.89543 10.8954 9 12 9C13.1046 9 14 9.89543 14 11Z" stroke="#808080" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            <path d="M7 3V6M17 3V6M7.10002 20C7.56329 17.7178 9.58104 16 12 16C14.419 16 16.4367 17.7178 16.9 20M6.2 21H17.8C18.9201 21 19.4802 21 19.908 20.782C20.2843 20.5903 20.5903 20.2843 20.782 19.908C21 19.4802 21 18.9201 21 17.8V8.2C21 7.07989 21 6.51984 20.782 6.09202C20.5903 5.71569 20.2843 5.40973 19.908 5.21799C19.4802 5 18.9201 5 17.8 5H6.2C5.0799 5 4.51984 5 4.09202 5.21799C3.71569 5.40973 3.40973 5.71569 3.21799 6.09202C3 6.51984 3 7.07989 3 8.2V17.8C3 18.9201 3 19.4802 3.21799 19.908C3.40973 20.2843 3.71569 20.5903 4.09202 20.782C4.51984 21 5.07989 21 6.2 21ZM14 11C14 12.1046 13.1046 13 12 13C10.8954 13 10 12.1046 10 11C10 9.89543 10.8954 9 12 9C13.1046 9 14 9.89543 14 11Z" stroke="#808080" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                         Lịch sử đặt
                     </div>
@@ -187,7 +197,7 @@ const HeaderClient = () => {
                 <Menu.Item className='info-admin' onClick={openModalChangePassword}>
                     <div className='info-admin-title px-1 py-2 flex items-center hover:text-[#5e5eff]'>
                         <svg className='mr-1' fill="#808080" height="20px" width="20px" version="1.1" id="Icon" xmlns="http://www.w3.org/2000/svg"
-                            viewBox="0 0 24 24" enable-background="new 0 0 24 24" >
+                            viewBox="0 0 24 24" enableBackground="new 0 0 24 24" >
                             <path d="M24,19v-2h-2.14c-0.09-0.36-0.24-0.7-0.42-1.02l1.52-1.52l-1.41-1.41l-1.52,1.52c-0.32-0.19-0.66-0.33-1.02-0.42V12h-2v2.14
                             c-0.36,0.09-0.7,0.24-1.02,0.42l-1.52-1.52l-1.41,1.41l1.52,1.52c-0.19,0.32-0.33,0.66-0.42,1.02H12v2h2.14
                             c0.09,0.36,0.24,0.7,0.42,1.02l-1.52,1.52l1.41,1.41l1.52-1.52c0.32,0.19,0.66,0.33,1.02,0.42V24h2v-2.14
@@ -201,7 +211,7 @@ const HeaderClient = () => {
                 </Menu.Item>
                 <Menu.Item className='info-admin' onClick={openModalLogout}>
                     <div className='info-admin-title px-1 py-2 flex items-center hover:text-[#fc5a5a]' >
-                        <svg className='mr-1' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <svg className='mr-1' xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M15 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10" />
                             <polyline points="10 17 15 12 10 7" />
                             <line x1="15" y1="12" x2="3" y2="12" />
@@ -228,11 +238,8 @@ const HeaderClient = () => {
                                     <li key={index} className={`cursor-pointer text-[15px] font-semibold capitalize ${location.pathname.includes(item.link) ? "active" : ""} `} onClick={() => navigate(item.link)} >
                                         <div >
                                             {item.label}
-
                                         </div>
                                     </li>
-
-
                                 )
                             })}
                         </ul>
@@ -246,15 +253,24 @@ const HeaderClient = () => {
                                 <div className='user-name'>
                                     {dataProfile?.name}
                                 </div>
-                                {/* <div className='role'>
-                                {dataProfile.roles[0]?.name}
-                            </div> */}
                             </Col>
                             <Col>
                                 <Dropdown overlay={listAction} trigger={['click']}>
                                     <a onClick={(e) => e.preventDefault()}>
                                         <Space>
-                                            <img className='rounded-full cursor-pointer' width={50} height={50} src={imageUrl ? imageUrl : profile} alt='' />
+                                            {/* 🟢 Fallback nhiều tầng: imageUrl -> dataProfile.avatar -> profile local */}
+                                            <img 
+                                                className='rounded-full cursor-pointer object-cover' 
+                                                width={50} 
+                                                height={50} 
+                                                src={imageUrl || dataProfile?.avatar || profile} 
+                                                alt='' 
+                                                onError={(e) => {
+                                                    const target = e.target as HTMLImageElement;
+                                                    target.onerror = null;
+                                                    target.src = profile;
+                                                }}
+                                            />
                                         </Space>
                                     </a>
                                 </Dropdown>
@@ -303,4 +319,4 @@ const HeaderClient = () => {
     )
 }
 
-export default HeaderClient
+export default HeaderClient;
