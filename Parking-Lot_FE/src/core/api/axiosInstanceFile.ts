@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const axiosInstanceFile = axios.create({
-    baseURL: process.env.REACT_APP_BASE_URL,
+    baseURL: "",
     responseType: 'arraybuffer',
     headers: {
         "Content-Type": "application/json",
