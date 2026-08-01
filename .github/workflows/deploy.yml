@@ -40,8 +40,7 @@ jobs:
           file: ./Parking-Lot_FE/Dockerfile
           push: true
           tags: huuhuanswe/parking-frontend:latest
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
+
 
   # ==========================================
   # JOB 2: AUTOMATIC DEPLOYMENT LÊN VPS
