@@ -45,7 +45,7 @@ public class WebSecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(
                         req -> req.requestMatchers("/admin").hasRole("ADMIN")
-                                .requestMatchers("/login", "/signup")
+                                .requestMatchers("/auth/login", "/auth/signup")
                                 .permitAll()
                                 .anyRequest()
                                 .authenticated()

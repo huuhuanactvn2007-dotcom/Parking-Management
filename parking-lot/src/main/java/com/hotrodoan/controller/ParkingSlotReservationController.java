@@ -56,10 +56,10 @@ public class ParkingSlotReservationController {
 
     @GetMapping("/admin")
     public ResponseEntity<Page<ParkingSlotReservation>> getAllParkingSlotReservations(@RequestParam(defaultValue = "") String dateStr,
-                                                                                    @RequestParam(defaultValue = "0") int page,
-                                                                                    @RequestParam(defaultValue = "10") int size,
-                                                                                    @RequestParam(defaultValue = "id") String sortBy,
-                                                                                    @RequestParam(defaultValue = "desc") String order) {
+                                                                                       @RequestParam(defaultValue = "0") int page,
+                                                                                       @RequestParam(defaultValue = "10") int size,
+                                                                                       @RequestParam(defaultValue = "id") String sortBy,
+                                                                                       @RequestParam(defaultValue = "desc") String order) {
         SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd");
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.fromString(order), sortBy));
         Date sqlSDate = null;
@@ -78,10 +78,10 @@ public class ParkingSlotReservationController {
 
     @GetMapping("/show")
     public ResponseEntity<Page<ParkingSlotReservation>> showParkingSlotReservations(HttpServletRequest request,
-                                                                                    @RequestParam(defaultValue = "0") int page,
-                                                                                    @RequestParam(defaultValue = "10") int size,
-                                                                                    @RequestParam(defaultValue = "id") String sortBy,
-                                                                                    @RequestParam(defaultValue = "desc") String order) {
+                                                                                       @RequestParam(defaultValue = "0") int page,
+                                                                                       @RequestParam(defaultValue = "10") int size,
+                                                                                       @RequestParam(defaultValue = "id") String sortBy,
+                                                                                       @RequestParam(defaultValue = "desc") String order) {
         String jwt = jwtTokenFilter.getJwt(request);
         String username = jwtProvider.getUsernameFromToken(jwt);
         User user = userService.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
@@ -92,8 +92,8 @@ public class ParkingSlotReservationController {
 
     @GetMapping("/add")
     public ResponseEntity<List<AvailableParkingSlotsInfo>> getAllParkingSlotAvailable(@RequestParam("startTimestamp") String startTimestampStr,
-                                                                                      @RequestParam("durationInMinutes") int durationInMinutes,
-                                                                                      @RequestParam("id") Long id) {
+                                                                                       @RequestParam("durationInMinutes") int durationInMinutes,
+                                                                                       @RequestParam("id") Long id) {
         Timestamp startTimestamp = Timestamp.valueOf(startTimestampStr);
         if (startTimestamp.before(Timestamp.valueOf(LocalDateTime.now()))) {
             throw new RuntimeException("Time in future");
@@ -103,6 +103,8 @@ public class ParkingSlotReservationController {
 
     @PostMapping("/add")
     public ResponseEntity<VNPayMessage> createParkingSlotReservation(HttpServletRequest request, @RequestBody ParkingSlotReservation parkingSlotReservation) {
+        System.out.println(java.time.LocalDateTime.now().toString().replace("T", " ") + " INFO --- Processing reservation request for spot_id=" + (parkingSlotReservation.getParkingSlot() != null ? parkingSlotReservation.getParkingSlot().getId() : "null"));
+
         String jwt = jwtTokenFilter.getJwt(request);
         String username = jwtProvider.getUsernameFromToken(jwt);
         User user = userService.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
@@ -127,7 +129,6 @@ public class ParkingSlotReservationController {
                     parkingSlotReservation.setCost(cost);
                 }
             }
-//        ParkingSlotReservation newParkingSlotReservation = parkingSlotReservationService.createParkingSlotReservation(parkingSlotReservation);
 
             ParkingSlotReservationSub parkingSlotReservationSub = parkingSlotReservationSubService.createParkingSlotReservationSub(parkingSlotReservation);
             ParkingSlot parkingSlot = parkingSlotReservation.getParkingSlot();
@@ -136,7 +137,6 @@ public class ParkingSlotReservationController {
             }else{
                 Long parkingSlotId = parkingSlot.getId();
                 parkingSlot = parkingSlotService.getParkingSlot(parkingSlotId);
-//            return new ResponseEntity<>(newParkingSlotReservation, HttpStatus.OK);
 
                 if (parkingSlotReservation.getCost() > 0){
                     String baseUrl = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
@@ -181,7 +181,6 @@ public class ParkingSlotReservationController {
         }
         else {
             parkingSlotReservationService.deleteParkingSlotReservation(id);
-//            Pa
             return new ResponseEntity<>(new ResponseMessage("Deleted Success"), HttpStatus.OK);
         }
     }

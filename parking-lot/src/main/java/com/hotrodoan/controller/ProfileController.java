@@ -58,11 +58,14 @@ public class ProfileController {
     }
 
     @GetMapping("/avatar")
-    public ResponseEntity<Resource> viewImage(HttpServletRequest request) throws Exception {
+    public ResponseEntity<?> viewImage(HttpServletRequest request) throws Exception {
         String token = jwtTokenFilter.getJwt(request);
         String username = jwtProvider.getUsernameFromToken(token);
         User user = userService.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
         Image image = user.getImage();
+        if (image == null) {
+            return ResponseEntity.ok().body(user.getAvatar());
+        }
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(image.getFileType()))
                 .body(new ByteArrayResource(image.getData()));

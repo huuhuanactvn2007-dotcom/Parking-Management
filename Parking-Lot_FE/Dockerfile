@@ -5,7 +5,7 @@ COPY package*.json ./
 RUN npm ci --legacy-peer-deps
 COPY . .
 # Set API URL gọi qua Domain chính
-ENV REACT_APP_API_URL=http://huan20.io.vn/api
+ENV REACT_APP_API_URL=https://huan20.io.vn
 RUN npm run build
 
 # --- Stage 2: Serve bằng Nginx ---

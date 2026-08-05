@@ -1,51 +1,49 @@
 services:
-  # 1. Database MySQL
+  #1 mysql
   mysql:
     image: mysql:8.0
     restart: always
     environment:
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_ROOT_PASSWORD: 123456
       MYSQL_DATABASE: parking_lot
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
+      # Tự động thực thi schema.sql mỗi khi volume mysql khởi tạo mới:
+      - ../db_backups/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # 2. Backend Spring Boot
+  #2 backend
   backend:
     build:
       context: ./parking-lot
       dockerfile: Dockerfile
     restart: always
-    ports:
-      - "8080:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/parking_lot?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: root
-      SPRING_JPA_DATABASE_PLATFORM: org.hibernate.dialect.MySQLDialect
-      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.MySQLDialect
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: parking_lot
+      DB_USER: root
+      DB_PASSWORD: 123456
     depends_on:
       mysql:
         condition: service_healthy
 
-  # 3. Frontend React SPA
+  #3 frontend
   frontend:
     build:
       context: ./Parking-Lot_FE
       dockerfile: Dockerfile
     restart: always
-    ports:
-      - "3000:3000"
     depends_on:
       - backend
 
-  # 4. Nginx Gateway (Reverse Proxy + SSL HTTPS Port 8090)
+  #4 gateway
   gateway:
     image: nginx:alpine
     restart: always
