@@ -1,5 +1,5 @@
 services:
-  #1 mysql
+  # 1. Mysql
   mysql:
     image: mysql:8.0
     restart: always
@@ -10,7 +10,6 @@ services:
       - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      # Tự động thực thi schema.sql mỗi khi volume mysql khởi tạo mới:
       - ../db_backups/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
@@ -18,7 +17,23 @@ services:
       timeout: 5s
       retries: 5
 
-  #2 backend
+  # 2. Redis (Single-Node)
+  redis:
+    image: redis:7-alpine
+    container_name: parking-redis
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379" # Chỉ bind localhost trên host để bảo mật
+    command: redis-server --requirepass ${REDIS_PASSWORD:-123456} --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-123456}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 3. Backend
   backend:
     build:
       context: ./parking-lot
@@ -30,11 +45,17 @@ services:
       DB_NAME: ${DB_NAME}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
+      # Cấu hình kết nối Redis cho Spring Boot
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-123456}
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_healthy
 
-  #3 frontend
+  # 4. Frontend
   frontend:
     build:
       context: ./Parking-Lot_FE
@@ -43,7 +64,7 @@ services:
     depends_on:
       - backend
 
-  #4 gateway
+  # 5. Gateway
   gateway:
     image: nginx:alpine
     restart: always
@@ -56,5 +77,34 @@ services:
       - frontend
       - backend
 
+  # 6. Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    restart: always
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  # 7. Cadvisor
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    restart: always
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+
+  # 8. Grafana
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    ports:
+      - "3001:3000"
+    depends_on:
+      - prometheus
+
 volumes:
   mysql_data:
+  redis_data: # Volume lưu dữ liệu Redis
