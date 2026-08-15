@@ -24,7 +24,6 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
         jsr250Enabled = true,
         prePostEnabled = true
 )
-// @EnableGlobalMethodSecurity(prePostEnabled = true)
 public class WebSecurityConfig {
     private final CustomUserDetailService customUserDetailService;
 

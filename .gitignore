@@ -1,2 +1,11 @@
 .env
 keys/
+nginx/certs/
+*.deb
+parking-lot/abcd.txt
+parking-lot/target/
+Parking-Lot_FE/node_modules/
+Parking-Lot_FE/build/
+mysql_data/
+prometheus_data/
+grafana_data/
