@@ -7,9 +7,9 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Data
 @AllArgsConstructor
@@ -23,9 +23,19 @@ public class CustomUserDetail implements UserDetails {
     private Collection<? extends GrantedAuthority> roles;
 
     public static CustomUserDetail build(User user){
-        List<GrantedAuthority> authorities = user.getRoles().stream().map(role -> new SimpleGrantedAuthority(role.getName().name())).collect(Collectors.toList());
+        List<GrantedAuthority> authorities = new ArrayList<>();
+        if (user.getRoles() != null) {
+            user.getRoles().forEach(role -> {
+                String roleName = role.getName().name();
+                authorities.add(new SimpleGrantedAuthority(roleName));
+                if (!roleName.startsWith("ROLE_")) {
+                    authorities.add(new SimpleGrantedAuthority("ROLE_" + roleName));
+                }
+            });
+        }
         return new CustomUserDetail(user.getId(), user.getName(), user.getUsername(), user.getPassword(), user.getEmail(), user.getAvatar(), authorities);
     }
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return roles;
