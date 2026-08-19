@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -162,5 +163,22 @@ public class ParkingSlotReservationServiceImpl implements ParkingSlotReservation
         parkingSlotReservation.setConfirmVehicleNumber(parkingSlotReservationSub.getConfirmVehicleNumber());
         parkingSlotReservation.setPair(parkingSlotReservationSub.isPair());
         return parkingSlotReservationRepository.save(parkingSlotReservation);
+    }
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ParkingSlotReservation createReservationWithLockTx(ParkingSlotReservation reservation, Long slotId) {
+        // 1. Kiểm tra tính khả dụng của ô đỗ trong phạm vi Transaction
+        ParkingSlot slot = parkingSlotService.getParkingSlot(slotId);
+        if (slot == null || !slot.isSlotAvailable()) {
+            throw new IllegalStateException("Vị trí đỗ xe không khả dụng hoặc đã có người đặt!");
+        }
+
+        // 2. Cập nhật trạng thái ô đỗ thành occupied
+        slot.setSlotAvailable(false);
+        parkingSlotService.updateParkingSlot(slot, slotId);
+
+        // 3. Thiết lập thời gian và lưu bản ghi đặt chỗ
+        reservation.setBookingDate(Timestamp.from(Instant.now()));
+        return parkingSlotReservationRepository.save(reservation);
     }
 }

@@ -24,4 +24,5 @@ public interface ParkingSlotReservationService {
     List<ParkingSlotReservation> findPastReservations();
     List<ParkingSlotReservation> getAllParkingSlotReservations();
     ParkingSlotReservation createParkingSlotReservationBySub(ParkingSlotReservationSub parkingSlotReservationSub);
+    ParkingSlotReservation createReservationWithLockTx(ParkingSlotReservation reservation, Long slotId);
 }
