@@ -6,7 +6,7 @@
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
 		<version>3.2.5</version>
-		<relativePath/> <!-- lookup parent from repository -->
+		<relativePath/>
 	</parent>
 	<groupId>com.hotrodoan</groupId>
 	<artifactId>parking-lot</artifactId>
@@ -44,6 +44,16 @@
 		<dependency>
 			<groupId>org.thymeleaf.extras</groupId>
 			<artifactId>thymeleaf-extras-springsecurity6</artifactId>
+		</dependency>
+
+		<!-- Metrics & Prometheus Monitoring -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.micrometer</groupId>
+			<artifactId>micrometer-registry-prometheus</artifactId>
 		</dependency>
 
 		<dependency>
@@ -115,5 +125,4 @@
 			</plugin>
 		</plugins>
 	</build>
-
 </project>

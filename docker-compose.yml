@@ -1,7 +1,4 @@
 services:
-  # ==========================================
-  # 1. Cơ sở dữ liệu (MySQL) - Chạy nội bộ
-  # ==========================================
   mysql:
     image: mysql:8.0
     container_name: parking-mysql
@@ -9,15 +6,11 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
-    # Đã đóng port ra ngoài Internet để bảo vệ dữ liệu tuyệt đối
     volumes:
       - mysql_data:/var/lib/mysql
     networks:
       - parking-net
 
-  # ==========================================
-  # 2. Cụm 3 Node Redis (Redlock) - Chạy nội bộ
-  # ==========================================
   redis-1:
     image: redis:7-alpine
     container_name: parking-redis-1
@@ -42,9 +35,6 @@ services:
     networks:
       - parking-net
 
-  # ==========================================
-  # 3. Ứng dụng lõi (Backend Spring Boot) - Chạy nội bộ
-  # ==========================================
   backend:
     build:
       context: ./parking-lot
@@ -52,7 +42,6 @@ services:
     image: huuhuanswe/parking-backend:v1.0.0
     container_name: parking-backend
     restart: always
-    # Không publish port 4001, chỉ nhận request thông qua Nginx Gateway
     environment:
       SPRING_DATASOURCE_URL: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
       SPRING_DATASOURCE_USERNAME: ${DB_USER}
@@ -64,7 +53,9 @@ services:
       REDIS_NODE3_HOST: ${REDIS_NODE3_HOST}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "*"
+      MANAGEMENT_ENDPOINT_PROMETHEUS_ENABLED: "true"
       MANAGEMENT_METRICS_EXPORT_PROMETHEUS_ENABLED: "true"
+      MANAGEMENT_METRICS_DISTRIBUTION_PERCENTILES_HTTP_SERVER_REQUESTS: "0.95,0.99"
     depends_on:
       - mysql
       - redis-1
@@ -73,9 +64,6 @@ services:
     networks:
       - parking-net
 
-  # ==========================================
-  # 4. Giao diện người dùng (Frontend React) - Chạy nội bộ
-  # ==========================================
   frontend:
     build:
       context: ./Parking-Lot_FE
@@ -88,15 +76,12 @@ services:
     networks:
       - parking-net
 
-  # ==========================================
-  # 5. Cổng điều hướng tập trung (Nginx Gateway) - Public SSL
-  # ==========================================
   gateway:
     image: nginx:alpine
     container_name: parking-gateway
     restart: always
     ports:
-      - "8090:8090" # Cổng duy nhất tiếp nhận kết nối an toàn từ Cloudflare
+      - "8090:8090"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
@@ -106,9 +91,6 @@ services:
     networks:
       - parking-net
 
-  # ==========================================
-  # 6. Giám sát tài nguyên phần cứng (cAdvisor) - Chạy nội bộ
-  # ==========================================
   cadvisor:
     image: gcr.io/cadvisor/cadvisor:v0.51.0
     container_name: parking-cadvisor
@@ -128,13 +110,12 @@ services:
     networks:
       - parking-net
 
-  # ==========================================
-  # 7. Thu thập chỉ số (Prometheus) - Chạy nội bộ
-  # ==========================================
   prometheus:
     image: prom/prometheus:v2.50.0
     container_name: parking-prometheus
     restart: always
+    ports:
+      - "9090:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
@@ -146,15 +127,12 @@ services:
     networks:
       - parking-net
 
-  # ==========================================
-  # 8. Trực quan hóa dữ liệu (Grafana Dashboard) - Có tài khoản bảo vệ
-  # ==========================================
   grafana:
     image: grafana/grafana:10.3.3
     container_name: parking-grafana
     restart: always
     ports:
-      - "4002:3000" # Mở port có xác thực đăng nhập để theo dõi hiệu năng
+      - "4002:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
@@ -166,9 +144,6 @@ services:
     networks:
       - parking-net
 
-# ==========================================
-# Cấu hình Mạng cô lập và Volume lưu trữ
-# ==========================================
 networks:
   parking-net:
     driver: bridge
