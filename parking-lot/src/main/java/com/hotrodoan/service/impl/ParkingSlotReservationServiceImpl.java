@@ -8,6 +8,8 @@ import com.hotrodoan.service.BlockService;
 import com.hotrodoan.service.ParkingLotService;
 import com.hotrodoan.service.ParkingSlotReservationService;
 import com.hotrodoan.service.ParkingSlotService;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,10 +19,10 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -33,6 +35,8 @@ public class ParkingSlotReservationServiceImpl implements ParkingSlotReservation
     private ParkingLotService parkingLotService;
     @Autowired
     private BlockService blockService;
+    @Autowired
+    private RedissonClient redissonClient;
 
     @Override
     public Page<ParkingSlotReservation> getAllParkingSlotReservations(Pageable pageable) {
@@ -41,10 +45,46 @@ public class ParkingSlotReservationServiceImpl implements ParkingSlotReservation
 
     @Override
     public ParkingSlotReservation createParkingSlotReservation(ParkingSlotReservation parkingSlotReservation) {
-        // Timestamp now = new Timestamp(System.currentTimeMillis());
-        Timestamp now = Timestamp.from(Instant.now());
-        parkingSlotReservation.setBookingDate(now);
-        return parkingSlotReservationRepository.save(parkingSlotReservation);
+        Long slotId = parkingSlotReservation.getParkingSlot().getId();
+        RLock lock = redissonClient.getLock("lock:slot:" + slotId);
+        boolean isAcquired = false;
+
+        try {
+            // Chờ tối đa 5s để lấy khóa, tự động gia hạn với Watchdog (leaseTime = -1)
+            isAcquired = lock.tryLock(5, -1, TimeUnit.SECONDS);
+            if (!isAcquired) {
+                throw new RuntimeException("Không thể lấy khóa phân tán cho slot ID: " + slotId);
+            }
+
+            // Kiểm tra trùng lịch đặt chỗ trong DB
+            Timestamp startTimestamp = parkingSlotReservation.getStartTimestamp();
+            int duration = parkingSlotReservation.getDurationInMinutes();
+            LocalDateTime start = startTimestamp.toLocalDateTime();
+            LocalDateTime desiredEnd = start.plusMinutes(duration);
+
+            List<ParkingSlotReservation> existingList = parkingSlotReservationRepository.findByParkingSlot(parkingSlotReservation.getParkingSlot());
+            boolean isConflict = existingList.stream().anyMatch(res -> {
+                LocalDateTime resStart = res.getStartTimestamp().toLocalDateTime();
+                LocalDateTime resEnd = resStart.plusMinutes(res.getDurationInMinutes());
+                return start.isBefore(resEnd) && desiredEnd.isAfter(resStart);
+            });
+
+            if (isConflict) {
+                throw new RuntimeException("Vị trí đỗ xe đã có người đặt trong khung giờ này!");
+            }
+
+            Timestamp now = Timestamp.from(Instant.now());
+            parkingSlotReservation.setBookingDate(now);
+            return parkingSlotReservationRepository.save(parkingSlotReservation);
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Giao dịch bị gián đoạn: " + e.getMessage());
+        } finally {
+            if (isAcquired && lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
     }
 
     @Override
@@ -133,14 +173,11 @@ public class ParkingSlotReservationServiceImpl implements ParkingSlotReservation
     @Override
     public List<ParkingSlotReservation> findPastReservations() {
         List<ParkingSlotReservation> allReservations = parkingSlotReservationRepository.findAll();
-        // Lọc ra những đặt chỗ đã kết thúc
-        List<ParkingSlotReservation> pastReservations = allReservations.stream()
+        return allReservations.stream()
                 .filter(reservation -> reservation.getStartTimestamp().toInstant()
                         .plusMillis(reservation.getDurationInMinutes() * 60 * 1000)
                         .isBefore(Instant.now()))
                 .collect(Collectors.toList());
-
-        return pastReservations;
     }
 
     @Override

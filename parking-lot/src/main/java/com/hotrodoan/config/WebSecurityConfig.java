@@ -24,10 +24,8 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
         jsr250Enabled = true,
         prePostEnabled = true
 )
-// @EnableGlobalMethodSecurity(prePostEnabled = true)
 public class WebSecurityConfig {
     private final CustomUserDetailService customUserDetailService;
-
     private final JwtTokenFilter jwtTokenFilter;
 
     public WebSecurityConfig(CustomUserDetailService customUserDetailService, JwtTokenFilter jwtTokenFilter) {
@@ -45,10 +43,9 @@ public class WebSecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(
                         req -> req.requestMatchers("/admin").hasRole("ADMIN")
-                                .requestMatchers("/auth/login", "/auth/signup")
-                                .permitAll()
-                                .anyRequest()
-                                .authenticated()
+                                .requestMatchers("/auth/login", "/auth/signup").permitAll()
+                                .requestMatchers("/actuator/**").permitAll()
+                                .anyRequest().authenticated()
                 )
                 .userDetailsService(customUserDetailService)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

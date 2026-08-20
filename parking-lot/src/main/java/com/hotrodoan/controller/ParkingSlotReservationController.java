@@ -5,10 +5,13 @@ import com.hotrodoan.model.dto.AvailableParkingSlotsInfo;
 import com.hotrodoan.model.dto.ParkingSlotReservationSub;
 import com.hotrodoan.model.dto.ResponseMessage;
 import com.hotrodoan.model.dto.VNPayMessage;
+import com.hotrodoan.repository.ParkingSlotReservationSubRepository;
 import com.hotrodoan.security.jwt.JwtProvider;
 import com.hotrodoan.security.jwt.JwtTokenFilter;
 import com.hotrodoan.service.*;
 import jakarta.servlet.http.HttpServletRequest;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -23,9 +26,9 @@ import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.Calendar;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/parking-slot-reservations")
@@ -53,6 +56,10 @@ public class ParkingSlotReservationController {
     private VNPayService vnPayService;
     @Autowired
     private ParkingSlotReservationSubService parkingSlotReservationSubService;
+    @Autowired
+    private ParkingSlotReservationSubRepository parkingSlotReservationSubRepository;
+    @Autowired
+    private RedissonClient redissonClient;
 
     @GetMapping("/admin")
     public ResponseEntity<Page<ParkingSlotReservation>> getAllParkingSlotReservations(@RequestParam(defaultValue = "") String dateStr,
@@ -71,7 +78,7 @@ public class ParkingSlotReservationController {
                 return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
             }
             return new ResponseEntity<>(parkingSlotReservationService.getAllParkingSlotReservations(sqlSDate, pageable), HttpStatus.OK);
-        }else {
+        } else {
             return new ResponseEntity<>(parkingSlotReservationService.getAllParkingSlotReservations(pageable), HttpStatus.OK);
         }
     }
@@ -102,61 +109,89 @@ public class ParkingSlotReservationController {
     }
 
     @PostMapping("/add")
-    public ResponseEntity<VNPayMessage> createParkingSlotReservation(HttpServletRequest request, @RequestBody ParkingSlotReservation parkingSlotReservation) {
-        System.out.println(java.time.LocalDateTime.now().toString().replace("T", " ") + " INFO --- Processing reservation request for spot_id=" + (parkingSlotReservation.getParkingSlot() != null ? parkingSlotReservation.getParkingSlot().getId() : "null"));
-
-        String jwt = jwtTokenFilter.getJwt(request);
-        String username = jwtProvider.getUsernameFromToken(jwt);
-        User user = userService.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
-        Customer customer = customerService.getCustomerByUser(user);
-        parkingSlotReservation.setCustomer(customer);
-        parkingSlotReservation.setBookingDate(Timestamp.valueOf(LocalDateTime.now()));
-
-        Timestamp startTimestamp = parkingSlotReservation.getStartTimestamp();
-        if (startTimestamp.before(Timestamp.valueOf(LocalDateTime.now()))) {
-            throw new RuntimeException("Time in future");
+    public ResponseEntity<?> createParkingSlotReservation(HttpServletRequest request, @RequestBody ParkingSlotReservation parkingSlotReservation) {
+        if (parkingSlotReservation.getParkingSlot() == null || parkingSlotReservation.getParkingSlot().getId() == null) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ResponseMessage("Parking slot is required"));
         }
-        else {
+
+        Long slotId = parkingSlotReservation.getParkingSlot().getId();
+        RLock lock = redissonClient.getLock("lock:slot:" + slotId);
+        boolean isAcquired = false;
+
+        try {
+            // Khóa phân tán: Chờ tối đa 50ms (Fail-fast để chặn Race Condition), tự gia hạn Watchdog
+            isAcquired = lock.tryLock(50, -1, TimeUnit.MILLISECONDS);
+            if (!isAcquired) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(new ResponseMessage("Slot đang có giao dịch xử lý đồng thời! Vui lòng thử lại."));
+            }
+
+            // Kiểm tra trùng lịch đặt trước trong DB
+            Timestamp startTimestamp = parkingSlotReservation.getStartTimestamp();
+            if (startTimestamp.before(Timestamp.valueOf(LocalDateTime.now()))) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ResponseMessage("Thời gian đặt phải ở tương lai"));
+            }
+
+            LocalDateTime start = startTimestamp.toLocalDateTime();
+            LocalDateTime desiredEnd = start.plusMinutes(parkingSlotReservation.getDurationInMinutes());
+
+            List<ParkingSlotReservationSub> existingSubs = parkingSlotReservationSubRepository.findByParkingSlot(parkingSlotReservation.getParkingSlot());
+            boolean isConflict = existingSubs.stream().anyMatch(sub -> {
+                LocalDateTime subStart = sub.getStartTimestamp().toLocalDateTime();
+                LocalDateTime subEnd = subStart.plusMinutes(sub.getDurationInMinutes());
+                return start.isBefore(subEnd) && desiredEnd.isAfter(subStart);
+            });
+
+            if (isConflict) {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(new ResponseMessage("Vị trí đỗ xe đã được giữ chỗ trong khung giờ này!"));
+            }
+
+            String jwt = jwtTokenFilter.getJwt(request);
+            String username = jwtProvider.getUsernameFromToken(jwt);
+            User user = userService.findByUsername(username).orElseThrow(() -> new RuntimeException("User not found"));
+            Customer customer = customerService.getCustomerByUser(user);
+            parkingSlotReservation.setCustomer(customer);
+            parkingSlotReservation.setBookingDate(Timestamp.valueOf(LocalDateTime.now()));
+
+            ParkingSlot parkingSlot = parkingSlotService.getParkingSlot(slotId);
+            if (parkingSlot == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new ResponseMessage("Không tìm thấy slot"));
+            }
+
             RegularPass regularPass = regularPassService.getRegularByCustomer(customer);
-            if (regularPass != null && regularPass.getStartDate().before(Timestamp.valueOf(LocalDateTime.now())) && regularPass.getEndDate().after(Timestamp.valueOf(LocalDateTime.now()))){
+            if (regularPass != null && regularPass.getStartDate().before(Timestamp.valueOf(LocalDateTime.now())) && regularPass.getEndDate().after(Timestamp.valueOf(LocalDateTime.now()))) {
                 parkingSlotReservation.setCost(0);
             } else {
                 if (parkingSlotReservation.getDurationInMinutes() <= 60) {
                     parkingSlotReservation.setCost(20000);
-                }
-                else {
-                    int cost = 20000 + (parkingSlotReservation.getDurationInMinutes() - 60)*(20000/60);
+                } else {
+                    int cost = 20000 + (parkingSlotReservation.getDurationInMinutes() - 60) * (20000 / 60);
                     parkingSlotReservation.setCost(cost);
                 }
             }
 
             ParkingSlotReservationSub parkingSlotReservationSub = parkingSlotReservationSubService.createParkingSlotReservationSub(parkingSlotReservation);
-            ParkingSlot parkingSlot = parkingSlotReservation.getParkingSlot();
-            if(parkingSlot.isSlotAvailable() == false) {
-                throw new RuntimeException("Parking slot is not available");
-            }else{
-                Long parkingSlotId = parkingSlot.getId();
-                parkingSlot = parkingSlotService.getParkingSlot(parkingSlotId);
 
-                if (parkingSlotReservation.getCost() > 0){
-                    String baseUrl = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
-                    String vnpayUrl = vnPayService.createOrder(parkingSlotReservationSub.getCost(), parkingSlotReservationSub.getId().toString()+"thu2", baseUrl);
-                    VNPayMessage VNPayMessage = new VNPayMessage("payment", vnpayUrl);
-                    return new ResponseEntity<>(VNPayMessage, HttpStatus.OK);
-                }else {
-                    parkingSlotReservationSub.setPair(true);
-                    parkingSlotReservationSubService.updateParkingSlotReservationSub(parkingSlotReservationSub, parkingSlotReservationSub.getId());
-                    ParkingSlotReservation newParkingSlotReservation1 = parkingSlotReservationService.createParkingSlotReservationBySub(parkingSlotReservationSub);
-                    parkingSlot.setSlotAvailable(false);
-                    parkingSlotService.updateParkingSlot(parkingSlot, parkingSlotId);
-                    return new ResponseEntity<>(new VNPayMessage("no-payment", "free"), HttpStatus.OK);
-                }
+            if (parkingSlotReservation.getCost() > 0) {
+                String baseUrl = request.getScheme() + "://" + request.getServerName() + ":" + request.getServerPort();
+                String vnpayUrl = vnPayService.createOrder(parkingSlotReservationSub.getCost(), parkingSlotReservationSub.getId().toString() + "thu2", baseUrl);
+                return ResponseEntity.ok(new VNPayMessage("payment", vnpayUrl));
+            } else {
+                parkingSlotReservationSub.setPair(true);
+                parkingSlotReservationSubService.updateParkingSlotReservationSub(parkingSlotReservationSub, parkingSlotReservationSub.getId());
+                parkingSlotReservationService.createParkingSlotReservationBySub(parkingSlotReservationSub);
+                parkingSlot.setSlotAvailable(false);
+                parkingSlotService.updateParkingSlot(parkingSlot, slotId);
+                return ResponseEntity.ok(new VNPayMessage("no-payment", "free"));
+            }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new ResponseMessage("Giao dịch bị gián đoạn"));
+        } finally {
+            if (isAcquired && lock.isHeldByCurrentThread()) {
+                lock.unlock();
             }
         }
-    }
-
-    public boolean isParkingSlotAvailable(ParkingSlot parkingSlot) {
-        return parkingSlot.isSlotAvailable();
     }
 
     @PutMapping("/update/{id}")
@@ -178,8 +213,7 @@ public class ParkingSlotReservationController {
 
         if (hoursBetween > 1) {
             return new ResponseEntity<>(new ResponseMessage("Cannot delete booking > 1 hour"), HttpStatus.BAD_REQUEST);
-        }
-        else {
+        } else {
             parkingSlotReservationService.deleteParkingSlotReservation(id);
             return new ResponseEntity<>(new ResponseMessage("Deleted Success"), HttpStatus.OK);
         }
