@@ -1,4 +1,3 @@
-// test_rps_ladder.js
 import http from 'k6/http';
 import { check } from 'k6';
 
@@ -20,19 +19,18 @@ export const options = {
       ],
     },
   },
-  insecureSkipTLSVerify: true,
 };
 
-const TOKEN = "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0dXNlciIsImlhdCI6MTc4NzIyNDg0MiwiZXhwIjoxNzg3MzExMjQyfQ.4u4g5HSAN16tCEhparLRWqCrdppDHVFCcTu3al6feBmeAeG3drDX8ZyhGiL4qoAZ6NV4EeZzZikkepJyJ4A5Kw";
+const TOKEN = "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiJ0ZXN0azYiLCJpYXQiOjE3ODg0NDQ4OTMsImV4cCI6MTc4ODUzMTI5M30.0qN2--2beQ6Zl_yGs2nETs10pRbQLLAqI_5Q5qAGUihE5i8PZab1g0aE1-vx2YpDejcwRQ3OWyy3oRfEULA75A";
 
 export default function () {
-  const url = 'https://localhost:8090/parking-slot-reservations/add';
+  const url = 'http://10.43.24.98:8080/parking-slot-reservations/add';
 
-  // Random slot từ 1 -> 50 để kiểm tra tải đều không chỉ 1 ô duy nhất
   const randomSlotId = Math.floor(Math.random() * 50) + 1;
 
   const payload = JSON.stringify({
     parkingSlot: { id: randomSlotId },
+    customer: { id: 1 },
     startTimestamp: "2027-01-01T10:00:00.000+00:00",
     durationInMinutes: 60,
     confirmName: "Benchmark Load",
